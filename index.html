@@ -1,0 +1,289 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Indoor Localization — Model Results</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: Arial, sans-serif;
+      background: #f4f6f9;
+      color: #333;
+      padding: 40px 20px;
+    }
+
+    .container {
+      max-width: 860px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      font-size: 24px;
+      margin-bottom: 6px;
+    }
+
+    p.sub {
+      color: #666;
+      font-size: 14px;
+      margin-bottom: 28px;
+    }
+
+    /* Run button */
+    #run-btn {
+      background: #1a73e8;
+      color: white;
+      border: none;
+      padding: 12px 28px;
+      font-size: 15px;
+      border-radius: 6px;
+      cursor: pointer;
+      margin-bottom: 32px;
+    }
+
+    #run-btn:hover { background: #1558b0; }
+    #run-btn:disabled { background: #aaa; cursor: not-allowed; }
+
+    /* Status message */
+    #status {
+      font-size: 14px;
+      color: #555;
+      margin-bottom: 20px;
+      min-height: 20px;
+    }
+
+    /* Results grid */
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 16px;
+      margin-bottom: 40px;
+    }
+
+    .card {
+      background: white;
+      border-radius: 8px;
+      padding: 20px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+      border-top: 4px solid #ccc;
+      text-align: center;
+    }
+
+    .card .model-name {
+      font-size: 15px;
+      font-weight: bold;
+      margin-bottom: 12px;
+    }
+
+    .card .acc-value {
+      font-size: 36px;
+      font-weight: bold;
+      line-height: 1;
+      margin-bottom: 4px;
+    }
+
+    .card .acc-label {
+      font-size: 12px;
+      color: #888;
+      margin-bottom: 14px;
+    }
+
+    .card .metrics {
+      font-size: 12px;
+      color: #555;
+      text-align: left;
+      border-top: 1px solid #eee;
+      padding-top: 10px;
+    }
+
+    .card .metrics div {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 4px;
+    }
+
+    .card .metrics span.val {
+      font-weight: bold;
+      color: #333;
+    }
+
+    /* Bar chart */
+    .chart-title {
+      font-size: 16px;
+      font-weight: bold;
+      margin-bottom: 16px;
+    }
+
+    .bar-row {
+      display: flex;
+      align-items: center;
+      margin-bottom: 14px;
+      gap: 10px;
+    }
+
+    .bar-label {
+      width: 120px;
+      font-size: 13px;
+      text-align: right;
+      flex-shrink: 0;
+    }
+
+    .bar-track {
+      flex: 1;
+      background: #e8ecf0;
+      border-radius: 4px;
+      height: 28px;
+      overflow: hidden;
+    }
+
+    .bar-fill {
+      height: 100%;
+      border-radius: 4px;
+      width: 0%;
+      transition: width 1s ease;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      padding-right: 8px;
+      color: white;
+      font-size: 12px;
+      font-weight: bold;
+    }
+
+    /* Hidden until results arrive */
+    #results-section { display: none; }
+
+    /* Error */
+    #error-box {
+      background: #fdecea;
+      border: 1px solid #f5c6cb;
+      color: #b71c1c;
+      padding: 14px 18px;
+      border-radius: 6px;
+      font-size: 13px;
+      display: none;
+      margin-bottom: 20px;
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <h1>Indoor Localization — Floor Detection</h1>
+  <p class="sub">UJIIndoorLoc dataset · WiFi RSSI · 4 Models compared</p>
+
+  <button id="run-btn" onclick="runModels()">▶ Load Results</button>
+
+  <div id="error-box"></div>
+  <div id="status"></div>
+
+  <div id="results-section">
+
+    <!-- Accuracy cards -->
+    <div class="cards" id="cards"></div>
+
+    <!-- Bar chart -->
+    <div class="chart-title">Accuracy Comparison</div>
+    <div id="bar-chart"></div>
+
+  </div>
+
+</div>
+
+<script>
+  function runModels() {
+    const btn = document.getElementById('run-btn');
+    const status = document.getElementById('status');
+    const errBox = document.getElementById('error-box');
+
+    btn.disabled = true;
+    btn.textContent = '⏳ Training models...';
+    status.textContent = 'This may take a few minutes. Please wait.';
+    errBox.style.display = 'none';
+    document.getElementById('results-section').style.display = 'none';
+
+    fetch('/results')
+      .then(res => res.json())
+      .then(data => {
+        btn.disabled = false;
+        btn.textContent = '↺ Reload Results';
+
+        if (data.status === 'not_ready') {
+          errBox.textContent = data.message;
+          errBox.style.display = 'block';
+          status.textContent = '';
+          return;
+        }
+
+        status.textContent = 'Done! Results below.';
+        showResults(data.results);
+      })
+      .catch(err => {
+        btn.disabled = false;
+        btn.textContent = '▶ Load Results';
+        errBox.textContent = 'Could not connect to server. Is Flask running?';
+        errBox.style.display = 'block';
+        status.textContent = '';
+      });
+  }
+
+  function showResults(results) {
+    const section = document.getElementById('results-section');
+    const cardsEl = document.getElementById('cards');
+    const chartEl = document.getElementById('bar-chart');
+
+    cardsEl.innerHTML = '';
+    chartEl.innerHTML = '';
+
+    // Find best accuracy
+    const bestAcc = Math.max(...results.map(r => r.accuracy));
+
+    results.forEach(r => {
+      const isBest = r.accuracy === bestAcc;
+
+      // Card
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.style.borderTopColor = r.color;
+      card.innerHTML = `
+        <div class="model-name">${r.model} ${isBest ? '🏆' : ''}</div>
+        <div class="acc-value" style="color:${r.color}">${r.accuracy}%</div>
+        <div class="acc-label">Accuracy</div>
+        <div class="metrics">
+          <div><span>F1 Score</span>     <span class="val">${r.f1}%</span></div>
+          <div><span>Precision</span>    <span class="val">${r.precision}%</span></div>
+          <div><span>Recall</span>       <span class="val">${r.recall}%</span></div>
+          <div><span>Train Time</span>   <span class="val">${r.train_time}s</span></div>
+        </div>
+      `;
+      cardsEl.appendChild(card);
+
+      // Bar row
+      const row = document.createElement('div');
+      row.className = 'bar-row';
+      row.innerHTML = `
+        <div class="bar-label">${r.model}</div>
+        <div class="bar-track">
+          <div class="bar-fill" id="bar-${r.model.replace(' ','')}"
+               style="background:${r.color}">
+            ${r.accuracy}%
+          </div>
+        </div>
+      `;
+      chartEl.appendChild(row);
+    });
+
+    section.style.display = 'block';
+
+    // Animate bars after render
+    setTimeout(() => {
+      results.forEach(r => {
+        const bar = document.getElementById('bar-' + r.model.replace(' ', ''));
+        if (bar) bar.style.width = r.accuracy + '%';
+      });
+    }, 100);
+  }
+</script>
+</body>
+</html>
